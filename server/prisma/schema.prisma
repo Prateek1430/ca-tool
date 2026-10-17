@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  CA
+}
+
+enum LinkStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+enum SourceType {
+  CSV
+  PDF
+}
+
+enum TxnType {
+  DEBIT
+  CREDIT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  LIKELY_UNUSED
+}
+
+enum InsightType {
+  MONEY_LEAK
+  SUBSCRIPTIONS
+  TAX
+  BUDGET
+  FORECAST
+}
+
+enum RiskRating {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ContractFindingType {
+  RISK
+  MISSING
+}
+
+enum ContractStatus {
+  PROCESSING
+  ANALYZED
+  FAILED
+}
+
+enum DraftStatus {
+  DRAFT
+  EDITED
+  SENT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+
+  statements      Statement[]
+  transactions    Transaction[]
+  subscriptions   Subscription[]
+  insights        FinanceInsight[]
+  contracts       Contract[]
+
+  linksAsCa       CaClientLink[] @relation("CaLinks")
+  linksAsClient   CaClientLink[] @relation("ClientLinks")
+
+  draftsAsCa      EmailDraft[]   @relation("CaDrafts")
+  draftsAsClient  EmailDraft[]   @relation("ClientDrafts")
+}
+
+model CaClientLink {
+  id         String     @id @default(uuid())
+  caId       String
+  clientId   String
+  status     LinkStatus @default(PENDING)
+  invitedAt  DateTime   @default(now())
+  respondedAt DateTime?
+
+  ca         User @relation("CaLinks", fields: [caId], references: [id])
+  client     User @relation("ClientLinks", fields: [clientId], references: [id])
+
+  @@unique([caId, clientId])
+}
+
+model Statement {
+  id         String     @id @default(uuid())
+  userId     String
+  filename   String
+  sourceType SourceType
+  bankFormat String
+  uploadedAt DateTime   @default(now())
+
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+}
+
+model Transaction {
+  id           String   @id @default(uuid())
+  userId       String
+  statementId  String
+  date         DateTime
+  amount       Float
+  descriptionEnc String
+  category     String
+  type         TxnType
+  merchant     String
+  isRecurring  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  statement Statement @relation(fields: [statementId], references: [id])
+
+  @@index([userId, date])
+}
+
+model Subscription {
+  id        String             @id @default(uuid())
+  userId    String
+  merchant  String
+  amount    Float
+  frequency String
+  lastSeen  DateTime
+  status    SubscriptionStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, merchant])
+}
+
+model FinanceInsight {
+  id        String      @id @default(uuid())
+  userId    String
+  type      InsightType
+  content   Json
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  userId          String
+  filename        String
+  uploadedAt      DateTime       @default(now())
+  extractedTextEnc String        @db.Text
+  status          ContractStatus @default(PROCESSING)
+  riskRating      RiskRating?
+  summary         Json?
+  renewalDate     DateTime?
+
+  user     User              @relation(fields: [userId], references: [id])
+  findings ContractFinding[]
+}
+
+model ContractFinding {
+  id          String              @id @default(uuid())
+  contractId  String
+  type        ContractFindingType
+  text        String
+  explanation String
+  severity    RiskRating
+
+  contract Contract @relation(fields: [contractId], references: [id])
+}
+
+model EmailDraft {
+  id            String      @id @default(uuid())
+  caId          String
+  clientId      String
+  originalEmail String
+  draftReply    String
+  context       Json
+  status        DraftStatus @default(DRAFT)
+  createdAt     DateTime    @default(now())
+
+  ca     User @relation("CaDrafts", fields: [caId], references: [id])
+  client User @relation("ClientDrafts", fields: [clientId], references: [id])
+}

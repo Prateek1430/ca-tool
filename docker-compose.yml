@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ca-tool-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ca_tool
+      POSTGRES_PASSWORD: ca_tool_dev_password
+      POSTGRES_DB: ca_tool
+    ports:
+      - "5432:5432"
+    volumes:
+      - ca_tool_pg_data:/var/lib/postgresql/data
+
+volumes:
+  ca_tool_pg_data:
